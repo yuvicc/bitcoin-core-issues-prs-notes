@@ -46,7 +46,7 @@ I was not using the similar test data for kernel api benchmarking
 |           34,999.80 |           28,571.59 |    0.2% |      465,484.22 |      148,375.57 |  3.137 |      12,150.19 |    0.4% |      0.01 | `VerifyScriptKernelApiBench`
 |           34,853.13 |           28,691.82 |    0.2% |      465,484.22 |      147,583.89 |  3.154 |      12,150.19 |    0.4% |      0.01 | `VerifyScriptKernelApiBench`
 
-
+*Note: the test can be seen here -> https://github.com/yuvicc/bitcoin/tree/2025-06-kernel_benchmarking*
 
 //to-do: block validation benchmarking
 
