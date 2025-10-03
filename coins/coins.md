@@ -43,13 +43,62 @@ method adds the coin node to the linked-list. The `Assume` checks you are adding
 the doubly linked-list. 
 
 ### CCoinsMap: Core data structure
-<!--TODO-->
+
+```bash
+/**
+ * PoolAllocator's MAX_BLOCK_SIZE_BYTES parameter here uses sizeof the data, and adds the size
+ * of 4 pointers. We do not know the exact node size used in the std::unordered_node implementation
+ * because it is implementation defined. Most implementations have an overhead of 1 or 2 pointers,
+ * so nodes can be connected in a linked list, and in some cases the hash value is stored as well.
+ * Using an additional sizeof(void*)*4 for MAX_BLOCK_SIZE_BYTES should thus be sufficient so that
+ * all implementations can allocate the nodes from the PoolAllocator.
+ */
+using CCoinsMap = std::unordered_map<COutPoint,
+                                     CCoinsCacheEntry,
+                                     SaltedOutpointHasher,
+                                     std::equal_to<COutPoint>,
+                                     PoolAllocator<CoinsCachePair,
+                                                   sizeof(CoinsCachePair) + sizeof(void*) * 4>>;
+```
+This is a hash table (unordered map) that maps from COutPoint to CCoinsCacheEntry.
+`COutPoint` is the outpoint to the transaction which was mined, this also acts as a key for the unordered map. The third parameter is `SaltedOutpointHasher` which is a custom hash function used in Bitcoin core, that means we don't use default hash function. 
+The fifth parameter is the custom allocator: `PoolAllocator`. This is crucial for performance. The standard allocator calls `malloc` for every map entry, which is slow and causes memory fragmentation. The pool allocator pre-allocates large chunks of memory and hands out pieces from those chunks. This is much faster and keeps related data close together in memory, improving cache locality. The size parameter tells it how much memory each map node needs. Bitcoin conservatively estimates this as the size of the key-value pair plus four extra pointers to account for implementation-defined overhead in the hash table's internal node structure. See more about it in `src/support/allocators/pool.h/`
 
 
+### using CCoinsMapMemoryResource = CCoinsMap::allocator_type::ResourceType;
 
+This is the underlying memory resource that the pool allocator uses. It manages the actual memory blocks. Each `CCoinsViewCache` has its own memory resource, so different caches don't interfere with each other's memory management. When you destroy and reconstruct the map in `ReallocateCache`, you also destroy and reconstruct this memory resource, which releases all the memory blocks back to the system.
 
+### class CCoinsViewCursor
 
+This class can be thought of like a database cursor that would let us scan through all the entries sequentially. This cursor has `uint256 hashBlock;` that lets us know which block's utxo set it represents, this becomes helpful for block undo computation.
 
+*Note: This cursor doesn't support for creating cursor, if you try to create one it gives exceptions.*
+
+### struct CoinsViewCacheCursor
+
+comment on code says:
+
+```
+/**
+ * Cursor for iterating over the linked list of flagged entries in CCoinsViewCache.
+ *
+ * This is a helper struct to encapsulate the diverging logic between a non-erasing
+ * CCoinsViewCache::Sync and an erasing CCoinsViewCache::Flush. This allows the receiver
+ * of CCoinsView::BatchWrite to iterate through the flagged entries without knowing
+ * the caller's intent.
+ *
+ * However, the receiver can still call CoinsViewCacheCursor::WillErase to see if the
+ * caller will erase the entry after BatchWrite returns. If so, the receiver can
+ * perform optimizations such as moving the coin out of the CCoinsCachEntry instead
+ * of copying it.
+ */
+```
+
+The `LIFETIMEBOUND` annotation is a compiler hint that these references must outlive the cursor object. This prevents dangling reference bugs where the cursor outlives the cache it's iterating.
+
+<!-- to-do -->
+todo!
 
 
 
