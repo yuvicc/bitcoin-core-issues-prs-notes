@@ -167,3 +167,14 @@ private:
         return static_cast<float> (length) / capacity;
     }
 };
+
+int main () {
+    HashTable<int> ht;
+    ht.set("yuvicc", 11);
+    ht.set("sudu", 5);
+    ht.set("pka", 11);
+
+    std::cout << ht.get("sudu").value();
+
+    return 0;
+}
