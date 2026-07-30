@@ -97,8 +97,24 @@ comment on code says:
 
 The `LIFETIMEBOUND` annotation is a compiler hint that these references must outlive the cursor object. This prevents dangling reference bugs where the cursor outlives the cache it's iterating.
 
-<!-- to-do -->
-todo!
+## CCoinsViewCache
+
+`CCoinsView` is an abstract interface. A single entry is a Coin: an unspent output (`CTxOut` = amount + scriptPubKey) plus a bit of metadata (which block height it was created at, whether it's a coinbase output). Coins are keyed by `COutPoint` (txid + output index). `CCoinsView` just declares the operations like `GetCoin(outpoint)` - fetch a coin, `HaveCoin(outpoint)` - is this outpoint unspent?, etc.
+
+It says nothing about where the data actually lives. That's the point - different subclasses derives it with different storage:
+
+- `CCoinsViewDB` (txdb.h) — backed by the on-disk LevelDB database (chainstate/). This is the real, persistent UTXO set.
+- `CCoinsViewMemPool` (txmempool.h) — presents mempool transactions' outputs as if they were spendable coins.
+- `CoinsViewEmpty` — a no-op view that has nothing.
+- `CCoinsViewCache` — the in-memory cache layer
+
+**Properties**
+
+1. Lazy loading / caching. When you ask for a coin (`GetCoin/AccessCoin`), it first checks its internal `cacheCoins` map. On a miss, it fetches from base (the DB) via `FetchCoinFromBase` and stores it in the map. Note the mutable members (coins.h:403-412) — even const lookups can populate the cache.
+2. Buffering modifications. As a block is validated and connected, spends and new outputs are applied to the cache only — marking entries dirty. Nothing touches disk yet. This is fast and lets you throw away the work if the block turns out invalid.
+3. Flushing. BatchWrite / flush pushes the accumulated changes down to base in one bulk operation. That's when the on-disk UTXO set actually updates.
+4. Stacking. Because it wraps any `CCoinsView`, you can stack a cache on top of another cache — e.g. a temporary cache for a single transaction on top of the block-level cache. (That's why the copy constructor is deleted at coins.h:429 — to prevent accidentally copying instead of stacking.)
+
 
 
 
